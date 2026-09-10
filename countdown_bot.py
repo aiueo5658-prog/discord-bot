@@ -1,6 +1,6 @@
 """
 文化祭カウントダウン Bot
-毎日 7:30 (JST) に「文化祭まであと○○日」+ 今日の占いデータ(外部API) + 軽い一言を投稿する。
+毎日 7:30 (JST) に「文化祭まであと○○日」+ 今日の名言(外部API) + 軽い一言を投稿する。
 
 ■ 必要な準備
   1. pip install discord.py aiohttp
@@ -8,12 +8,11 @@
   3. Bot に対象チャンネルへの「メッセージ送信」権限を付与してサーバーに招待
   4. 下の設定値(CHANNEL_ID, EVENT_DATE)を書き換える
      ※ TOKEN は環境変数 DISCORD_BOT_TOKEN に入れる想定(コードに直書きしない)
+  5. Discord Developer Portal の Bot ページで「MESSAGE CONTENT INTENT」をON
 
-■ 占いデータについて
-  「今日は何の日API」(https://note.com/sooz/n/naffb68c7f53b)を利用しています。
-  日付(mmdd)を渡すとその日の記念日をJSONで返す無料API(認証不要)。
-  利用条件として、投稿元へのリンク掲示が求められているため、投稿文の末尾に毎回添えています。
-  また提供者から「過度なアクセスは控えるように」と案内されているため、1日1回の利用に留めてください。
+■ 名言データについて
+  「名言API」(https://meigen.doodlenote.net/api/json.php)を利用しています。
+  認証不要・無料。呼び出すたびにランダムな名言を1件返します。
 
 ■ 起動方法
   python countdown_bot.py
@@ -39,9 +38,8 @@ EVENT_DATE = date(2026, 10, 31)
 JST = timezone(timedelta(hours=9))
 POST_TIME = time(hour=7, minute=30, tzinfo=JST)
 
-# 今日は何の日API(https://note.com/sooz/n/naffb68c7f53b)
-WHATISTODAY_API_URL = "https://api.whatistoday.cyou/v3/anniv/{mmdd}"
-WHATISTODAY_CREDIT = "記念日データ提供: 今日は何の日API (https://note.com/sooz/n/naffb68c7f53b)"
+# 名言API(https://meigen.doodlenote.net/api/json.php)
+MEIGEN_API_URL = "https://meigen.doodlenote.net/api/json.php"
 
 # ============================================
 
@@ -52,6 +50,7 @@ CLOSINGS = [
     "そんな感じで今日も一日よろしくね",
     "というわけで、みんな適度にやっていこう",
     "今日もゆるく頑張ろう",
+    "ではまた明日～",
 ]
 
 
@@ -61,28 +60,25 @@ def get_days_left() -> int:
     return (EVENT_DATE - today).days
 
 
-async def fetch_today_calendar_data() -> dict:
-    """暦データAPIから当月分を取得し、今日の1日分のデータを返す。
+async def fetch_meigen() -> dict:
+    """名言APIからランダムな名言を1件取得する。
     取得に失敗した場合は None を返す。
     """
-    today = datetime.now(JST).date()
-    url = CALENDAR_API_URL.format(year=today.year, month=today.month)
-
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+            async with session.get(MEIGEN_API_URL, timeout=aiohttp.ClientTimeout(total=5)) as resp:
                 if resp.status != 200:
                     return None
                 data = await resp.json(content_type=None)
     except Exception as e:
-        print(f"[暦データAPI取得エラー] {e}")
+        print(f"[名言API取得エラー] {e}")
         return None
 
     try:
-        day_data = next(d for d in data["days"] if d["day"] == today.day)
-        return day_data
-    except (KeyError, StopIteration, TypeError) as e:
-        print(f"[暦データ形式エラー] {e}")
+        entry = data[0]
+        return {"meigen": entry["meigen"], "author": entry["auther"]}
+    except (KeyError, IndexError, TypeError) as e:
+        print(f"[名言データ形式エラー] {e}")
         return None
 
 
@@ -93,29 +89,21 @@ async def build_message() -> str:
     if days_left > 0:
         header = f"文化祭まであと{days_left}日"
     elif days_left == 0:
-        header = "今日から文化祭!!!!"
+        header = "今日から文化祭"
     else:
         header = "文化祭、お疲れ様でした"
 
-    day_data = await fetch_today_calendar_data()
-    if day_data is None:
-        fortune_block = "今日の暦情報：取得できませんでした"
+    meigen_data = await fetch_meigen()
+    if meigen_data is None:
+        fortune_block = "今日の名言：取得できませんでした"
     else:
-        rokuyo = day_data.get("rokuyo", "不明")
-        keyword = day_data.get("daily_keyword", "")
-        advice = day_data.get("energy_advice", "")
-        lines = [f"今日は{rokuyo}"]
-        if keyword:
-            lines.append(keyword)
-        if advice:
-            lines.append(advice)
-        fortune_block = "\n".join(lines)
+        fortune_block = f"今日の名言\n「{meigen_data['meigen']}」\n― {meigen_data['author']}"
 
     return f"{header}\n\n{fortune_block}\n\n{closing}"
 
 
 intents = discord.Intents.default()
-intents.message_content = True
+intents.message_content = True  # !countdown コマンドを読み取るために必要
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
@@ -154,4 +142,3 @@ if __name__ == "__main__":
             "例: export DISCORD_BOT_TOKEN='your_token_here'"
         )
     bot.run(token)
-
