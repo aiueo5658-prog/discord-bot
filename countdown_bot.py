@@ -115,6 +115,7 @@ async def build_message() -> str:
 
 
 intents = discord.Intents.default()
+intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
