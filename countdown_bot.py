@@ -19,7 +19,6 @@
 """
 
 import os
-import random
 from datetime import date, datetime, time, timezone, timedelta
 
 import aiohttp
@@ -42,16 +41,6 @@ POST_TIME = time(hour=7, minute=30, tzinfo=JST)
 MEIGEN_API_URL = "https://meigen.doodlenote.net/api/json.php"
 
 # ============================================
-
-# 締めの一言(軽め・強制感なし)
-CLOSINGS = [
-    "ということでみんな頑張ろうね～",
-    "まあ、ぼちぼちいきましょう",
-    "そんな感じで今日も一日よろしくね",
-    "というわけで、みんな適度にやっていこう",
-    "今日もゆるく頑張ろう",
-    "ではまた明日～",
-]
 
 
 def get_days_left() -> int:
@@ -84,22 +73,21 @@ async def fetch_meigen() -> dict:
 
 async def build_message() -> str:
     days_left = get_days_left()
-    closing = random.choice(CLOSINGS)
 
     if days_left > 0:
-        header = f"文化祭まであと{days_left}日"
+        header = f"**文化祭まであと{days_left}日！！**"
     elif days_left == 0:
-        header = "今日から文化祭"
+        header = "**今日から文化祭！！**"
     else:
-        header = "文化祭、お疲れ様でした"
+        header = "**文化祭、お疲れ様でした！！**"
 
     meigen_data = await fetch_meigen()
     if meigen_data is None:
         fortune_block = "今日の名言：取得できませんでした"
     else:
-        fortune_block = f"今日の名言\n「{meigen_data['meigen']}」\n― {meigen_data['author']}"
+        fortune_block = f"> *「{meigen_data['meigen']}」*\n> *― {meigen_data['author']}*"
 
-    return f"{header}\n\n{fortune_block}\n\n{closing}"
+    return f"{header}\n\n{fortune_block}"
 
 
 intents = discord.Intents.default()
