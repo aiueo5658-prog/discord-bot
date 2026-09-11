@@ -1,14 +1,22 @@
 """
 文化祭カウントダウン Bot
 毎日 7:30 (JST) に「文化祭まであと○○日」+ 今日の名言(外部API) + 軽い一言を投稿する。
+また、!role コマンドでメンバーが自分でロールを付け外しできる。
 
 ■ 必要な準備
   1. pip install discord.py aiohttp
   2. Discord Developer Portal で Bot を作成し、TOKEN を取得
   3. Bot に対象チャンネルへの「メッセージ送信」権限を付与してサーバーに招待
-  4. 下の設定値(CHANNEL_ID, EVENT_DATE)を書き換える
+  4. 下の設定値(CHANNEL_ID, EVENT_DATE, ASSIGNABLE_ROLES)を書き換える
      ※ TOKEN は環境変数 DISCORD_BOT_TOKEN に入れる想定(コードに直書きしない)
   5. Discord Developer Portal の Bot ページで「MESSAGE CONTENT INTENT」をON
+  6. サーバー設定でBotのロールを、ASSIGNABLE_ROLESに含めた全ロールより上に配置し、
+     Botに「Manage Roles」権限を付与すること(これがないと付け外しに失敗する)
+
+■ セルフロール機能の使い方(Discord上で)
+  !role list            付け外しできるロール一覧を表示
+  !role add ロール名     ロールを付ける(例: !role add プログラミング島)
+  !role remove ロール名  ロールを外す
 
 ■ 名言データについて
   「名言API」(https://meigen.doodlenote.net/api/json.php)を利用しています。
@@ -27,8 +35,8 @@ from discord.ext import commands, tasks
 
 # ========= 設定値(ここを書き換える) =========
 
-# 投稿したいチャンネルのID(チャンネルを右クリック→IDをコピー。要:開発者モードON)
-CHANNEL_ID = 1355363072729944195  # ← 自分のサーバーのチャンネルIDに変更してください
+# 投稿したいチャンネルのID
+CHANNEL_ID = 1355363072729944195  # 「広場」チャンネル
 
 # 文化祭初日
 EVENT_DATE = date(2026, 10, 31)
@@ -39,6 +47,21 @@ POST_TIME = time(hour=7, minute=30, tzinfo=JST)
 
 # 名言API(https://meigen.doodlenote.net/api/json.php)
 MEIGEN_API_URL = "https://meigen.doodlenote.net/api/json.php"
+
+# チャットで自由に付け外しできるロール名の一覧(サーバーのロール名と完全一致させること)
+# 学年ロール(J1〜J3, S1〜S3)・管理者・Bot用ロール(carl-bot, Combu BOT)は対象外
+ASSIGNABLE_ROLES = [
+    "音楽島",
+    "プログラミング島",
+    "映像島",
+    "モデル島",
+    "OB/OG",
+    "ドローン島",
+    "Java版マイクラ自治区",
+    "VRChatお嬢様自治区",
+    "Bloxd自治区",
+    "電脳旋律研究所",
+]
 
 # ============================================
 
@@ -120,6 +143,87 @@ async def on_ready():
 @bot.command(name="countdown")
 async def countdown_now(ctx):
     await ctx.send(await build_message())
+
+
+def find_assignable_role(guild: discord.Guild, role_name: str):
+    """ホワイトリスト(ASSIGNABLE_ROLES)に含まれるロールだけを名前で検索する。
+    大文字小文字・前後の空白の違いは吸収する。
+    """
+    target = role_name.strip().lower()
+    allowed = {name.lower() for name in ASSIGNABLE_ROLES}
+    if target not in allowed:
+        return None
+    for role in guild.roles:
+        if role.name.lower() == target:
+            return role
+    return None
+
+
+@bot.group(name="role", invoke_without_command=True)
+async def role_group(ctx):
+    """!role add <ロール名> / !role remove <ロール名> / !role list"""
+    await ctx.send(
+        "使い方：\n"
+        "`!role list` : 付け外しできるロール一覧を見る\n"
+        "`!role add ロール名` : ロールを付ける\n"
+        "`!role remove ロール名` : ロールを外す"
+    )
+
+
+@role_group.command(name="list")
+async def role_list(ctx):
+    lines = "\n".join(f"・{name}" for name in ASSIGNABLE_ROLES)
+    await ctx.send(f"付け外しできるロール一覧：\n{lines}")
+
+
+@role_group.command(name="add")
+async def role_add(ctx, *, role_name: str = None):
+    if not role_name:
+        await ctx.send("ロール名を指定してください。例：`!role add プログラミング島`")
+        return
+
+    role = find_assignable_role(ctx.guild, role_name)
+    if role is None:
+        await ctx.send(f"「{role_name}」は付け外し可能なロールに含まれていません。`!role list` で一覧を確認してください。")
+        return
+
+    if role in ctx.author.roles:
+        await ctx.send(f"すでに「{role.name}」を持っています。")
+        return
+
+    try:
+        await ctx.author.add_roles(role, reason="セルフロール機能による自己申請")
+        await ctx.send(f"「{role.name}」を付けました。")
+    except discord.Forbidden:
+        await ctx.send(
+            "権限が足りずロールを付けられませんでした。"
+            "サーバー管理者に「Botのロール順位」と「Manage Roles権限」を確認してもらってください。"
+        )
+
+
+@role_group.command(name="remove")
+async def role_remove(ctx, *, role_name: str = None):
+    if not role_name:
+        await ctx.send("ロール名を指定してください。例：`!role remove プログラミング島`")
+        return
+
+    role = find_assignable_role(ctx.guild, role_name)
+    if role is None:
+        await ctx.send(f"「{role_name}」は付け外し可能なロールに含まれていません。`!role list` で一覧を確認してください。")
+        return
+
+    if role not in ctx.author.roles:
+        await ctx.send(f"「{role.name}」は付いていません。")
+        return
+
+    try:
+        await ctx.author.remove_roles(role, reason="セルフロール機能による自己申請")
+        await ctx.send(f"「{role.name}」を外しました。")
+    except discord.Forbidden:
+        await ctx.send(
+            "権限が足りずロールを外せませんでした。"
+            "サーバー管理者に「Botのロール順位」と「Manage Roles権限」を確認してもらってください。"
+        )
 
 
 if __name__ == "__main__":
