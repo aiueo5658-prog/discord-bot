@@ -1,10 +1,10 @@
 """
 文化祭カウントダウン Bot
-毎日 7:30 (JST) に「文化祭まであと○○日」+ 今日の名言(外部API) + 軽い一言を投稿する。
+毎日 7:30 (JST) に「文化祭まであと○○日」を投稿する。
 また、!role コマンドでメンバーが自分でロールを付け外しできる。
 
 ■ 必要な準備
-  1. pip install discord.py aiohttp
+  1. pip install discord.py
   2. Discord Developer Portal で Bot を作成し、TOKEN を取得
   3. Bot に対象チャンネルへの「メッセージ送信」権限を付与してサーバーに招待
   4. 下の設定値(CHANNEL_ID, EVENT_DATE, ASSIGNABLE_ROLES)を書き換える
@@ -18,10 +18,6 @@
   !role add ロール名     ロールを付ける(例: !role add プログラミング島)
   !role remove ロール名  ロールを外す
 
-■ 名言データについて
-  「名言API」(https://meigen.doodlenote.net/api/json.php)を利用しています。
-  認証不要・無料。呼び出すたびにランダムな名言を1件返します。
-
 ■ 起動方法
   python countdown_bot.py
 """
@@ -29,7 +25,6 @@
 import os
 from datetime import date, datetime, time, timezone, timedelta
 
-import aiohttp
 import discord
 from discord.ext import commands, tasks
 
@@ -44,9 +39,6 @@ EVENT_DATE = date(2026, 10, 31)
 # 投稿時刻(JST 7:30)
 JST = timezone(timedelta(hours=9))
 POST_TIME = time(hour=7, minute=30, tzinfo=JST)
-
-# 名言API(https://meigen.doodlenote.net/api/json.php)
-MEIGEN_API_URL = "https://meigen.doodlenote.net/api/json.php"
 
 # チャットで自由に付け外しできるロール名の一覧(サーバーのロール名と完全一致させること)
 # 学年ロール(J1〜J3, S1〜S3)・管理者・Bot用ロール(carl-bot, Combu BOT)は対象外
@@ -72,45 +64,15 @@ def get_days_left() -> int:
     return (EVENT_DATE - today).days
 
 
-async def fetch_meigen() -> dict:
-    """名言APIからランダムな名言を1件取得する。
-    取得に失敗した場合は None を返す。
-    """
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(MEIGEN_API_URL, timeout=aiohttp.ClientTimeout(total=5)) as resp:
-                if resp.status != 200:
-                    return None
-                data = await resp.json(content_type=None)
-    except Exception as e:
-        print(f"[名言API取得エラー] {e}")
-        return None
-
-    try:
-        entry = data[0]
-        return {"meigen": entry["meigen"], "author": entry["auther"]}
-    except (KeyError, IndexError, TypeError) as e:
-        print(f"[名言データ形式エラー] {e}")
-        return None
-
-
-async def build_message() -> str:
+def build_message() -> str:
     days_left = get_days_left()
 
     if days_left > 0:
-        header = f"**文化祭まであと{days_left}日！！**"
+        return f"**文化祭まであと{days_left}日！！**"
     elif days_left == 0:
-        header = "**今日から文化祭！！**"
+        return "**今日から文化祭！！**"
     else:
-        header = "**文化祭、お疲れ様でした！！**"
-
-    meigen_data = await fetch_meigen()
-    if meigen_data is None:
-        fortune_block = "今日の名言：取得できませんでした"
-    else:
-        fortune_block = f"> *「{meigen_data['meigen']}」*\n> *― {meigen_data['author']}*"
-
-    return f"{header}\n\n{fortune_block}"
+        return "**文化祭、お疲れ様でした！！**"
 
 
 intents = discord.Intents.default()
@@ -124,7 +86,7 @@ async def daily_countdown():
     if channel is None:
         print(f"[エラー] チャンネルID {CHANNEL_ID} が見つかりません。CHANNEL_IDを確認してください。")
         return
-    await channel.send(await build_message())
+    await channel.send(build_message())
 
 
 @daily_countdown.before_loop
@@ -142,7 +104,7 @@ async def on_ready():
 # 動作確認用: 手動でカウントダウンを投稿させたいときに使うコマンド
 @bot.command(name="countdown")
 async def countdown_now(ctx):
-    await ctx.send(await build_message())
+    await ctx.send(build_message())
 
 
 def find_assignable_role(guild: discord.Guild, role_name: str):
