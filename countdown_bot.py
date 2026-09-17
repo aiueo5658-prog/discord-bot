@@ -421,7 +421,7 @@ async def skip_slash(interaction: discord.Interaction, 日付: str):
 
     skipped_dates.add(parsed)
     db_add_skipped_date(parsed)
-    await interaction.response.send_message(f"{parsed.strftime('%Y年%m月%d日')} の活動日案内をスキップに設定しました。")
+    await interaction.response.send_message(f"{parsed.strftime('%Y年%m月%d日')} の活動日案内をスキップに設定しました。", ephemeral=True)
 
 
 @bot.tree.command(name="unskip", description="【管理者専用】スキップ設定を解除する")
@@ -442,7 +442,7 @@ async def unskip_slash(interaction: discord.Interaction, 日付: str):
     if parsed in skipped_dates:
         skipped_dates.discard(parsed)
         db_remove_skipped_date(parsed)
-        await interaction.response.send_message(f"{parsed.strftime('%Y年%m月%d日')} のスキップ設定を解除しました。")
+        await interaction.response.send_message(f"{parsed.strftime('%Y年%m月%d日')} のスキップ設定を解除しました。", ephemeral=True)
     else:
         await interaction.response.send_message(f"{parsed.strftime('%Y年%m月%d日')} はスキップ登録されていません。", ephemeral=True)
 
@@ -450,10 +450,10 @@ async def unskip_slash(interaction: discord.Interaction, 日付: str):
 @bot.tree.command(name="skipped", description="現在スキップ登録されている日付の一覧を表示する")
 async def skipped_slash(interaction: discord.Interaction):
     if not skipped_dates:
-        await interaction.response.send_message("現在スキップ登録されている日付はありません。")
+        await interaction.response.send_message("現在スキップ登録されている日付はありません。", ephemeral=True)
         return
     lines = "\n".join(f"・{d.strftime('%Y年%m月%d日')}" for d in sorted(skipped_dates))
-    await interaction.response.send_message(f"スキップ登録されている日付：\n{lines}")
+    await interaction.response.send_message(f"スキップ登録されている日付：\n{lines}", ephemeral=True)
 
 
 @bot.tree.command(name="save", description="このスレッドが自動アーカイブされないよう延命登録する")
@@ -464,7 +464,7 @@ async def save_slash(interaction: discord.Interaction):
 
     saved_thread_ids.add(interaction.channel.id)
     db_add_saved_thread(interaction.channel.id)
-    await interaction.response.send_message("このスレッドを延命登録しました。表示され続けるよう自動でケアします。")
+    await interaction.response.send_message("このスレッドを延命登録しました。表示され続けるよう自動でケアします。", ephemeral=True)
 
 
 @bot.tree.command(name="unsave", description="このスレッドの延命登録を解除する")
@@ -476,7 +476,7 @@ async def unsave_slash(interaction: discord.Interaction):
     if interaction.channel.id in saved_thread_ids:
         saved_thread_ids.discard(interaction.channel.id)
         db_remove_saved_thread(interaction.channel.id)
-        await interaction.response.send_message("このスレッドの延命登録を解除しました。")
+        await interaction.response.send_message("このスレッドの延命登録を解除しました。", ephemeral=True)
     else:
         await interaction.response.send_message("このスレッドは延命登録されていません。", ephemeral=True)
 
@@ -506,7 +506,7 @@ role_app_group = discord.app_commands.Group(name="role", description="自分の�
 @role_app_group.command(name="list", description="付け外しできるロール一覧を表示")
 async def role_list_slash(interaction: discord.Interaction):
     lines = "\n".join(f"・{name}" for name in ASSIGNABLE_ROLES)
-    await interaction.response.send_message(f"付け外しできるロール一覧：\n{lines}")
+    await interaction.response.send_message(f"付け外しできるロール一覧：\n{lines}", ephemeral=True)
 
 
 @role_app_group.command(name="add", description="ロールを自分に付ける")
@@ -526,7 +526,7 @@ async def role_add_slash(interaction: discord.Interaction, role_name: discord.ap
 
     try:
         await interaction.user.add_roles(role, reason="セルフロール機能による自己申請")
-        await interaction.response.send_message(f"「{role.name}」を付けました。")
+        await interaction.response.send_message(f"「{role.name}」を付けました。", ephemeral=True)
     except discord.Forbidden:
         await interaction.response.send_message(
             "権限が足りずロールを付けられませんでした。"
@@ -552,7 +552,7 @@ async def role_remove_slash(interaction: discord.Interaction, role_name: discord
 
     try:
         await interaction.user.remove_roles(role, reason="セルフロール機能による自己申請")
-        await interaction.response.send_message(f"「{role.name}」を外しました。")
+        await interaction.response.send_message(f"「{role.name}」を外しました。", ephemeral=True)
     except discord.Forbidden:
         await interaction.response.send_message(
             "権限が足りずロールを外せませんでした。"
@@ -594,7 +594,7 @@ SKILLS_TEXT = """## このBotで使えるコマンド一覧
 
 @bot.tree.command(name="skills", description="このBotで使えるコマンドの一覧を表示します")
 async def skills_slash(interaction: discord.Interaction):
-    await interaction.response.send_message(SKILLS_TEXT)
+    await interaction.response.send_message(SKILLS_TEXT, ephemeral=True)
 
 
 # 動作確認用: 手動でカウントダウンを投稿させたいときに使うコマンド
